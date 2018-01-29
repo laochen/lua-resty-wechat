@@ -23,8 +23,8 @@ _G[modname] = _M
 local ffi = require "ffi"
 local ffi_str = ffi.string
 
-local hex = require "resty.wechat.utils.hex"
-local xml2lib = require "resty.wechat.utils.xml2lib"
+local hex = require "resty.sns.utils.hex"
+local xml2lib = require "resty.sns.utils.xml2lib"
 
 local rcvmsgfmt = {
   common  = { "tousername", "fromusername", "createtime", "msgtype" },
@@ -304,7 +304,7 @@ end
 --------------------------------------------------
 
 local function _match_auto_reply(rcvmsg)
-  local autoreply = wechat_config.autoreply or {}
+  local autoreply = sns_config.wechat_autoreply or {}
 
   local replies = autoreply[rcvmsg.msgtype]
   if not replies or #replies == 0 then
@@ -506,7 +506,7 @@ local mt = {
       timestamp = args.timestamp,
       nonce = args.nonce,
       echostr = args.echostr,
-      token = wechat_config.token,
+      token = sns_config.wechat_token,
       method = method,
       body = body,
       rcvmsg = {}
@@ -541,13 +541,13 @@ local mt = {
       if not continue then return ngx_exit(ngx.HTTP_OK) end
     end
 
-    if wechat_config.autoreplyurl and wechat_config.autoreplyurl ~= "" then
-      res, err = require("resty.wechat.utils.http").new():request_uri(wechat_config.autoreplyurl, {
+    if sns_config.wechat_autoreplyurl and sns_config.wechat_autoreplyurl ~= "" then
+      res, err = require("resty.utils.http").new():request_uri(sns_config.wechat_autoreplyurl, {
         method = "POST", body = cjson.encode(rcvmsg),
         headers = { ["Content-Type"] = "application/json" },
       })
       if not res or err or tostring(res.status) ~= "200" then
-        ngx_log(ngx.ERR, "failed to request auto reply URL ", wechat_config.autoreplyurl, ": ", err or tostring(res.status))
+        ngx_log(ngx.ERR, "failed to request auto reply URL ", sns_config.wechat_autoreplyurl, ": ", err or tostring(res.status))
         return ngx_exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
       end
 

@@ -2,7 +2,7 @@ local modname = "wechat_proxy_access_filter"
 local _M = { _VERSION = '0.0.1' }
 _G[modname] = _M
 
-local permitClientIPs = wechat_config.permitClientIPs or { "127.0.0.1" }
+local permitClientIPs = sns_config.permitClientIPs or { "127.0.0.1" }
 
 local function tableContainsValue(t, value)
   for k, v in pairs(t) do

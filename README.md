@@ -1,6 +1,8 @@
-# lua-resty-wechat
+# lua-resty-sns
 
-使用Lua编写的nginx服务器微信公众平台代理.
+## 相关代码调整梳理来自 https://github.com/CharLemAznable/lua-resty-wechat
+
+使用Lua编写的nginx服务器微信、微博公众平台代理.
 
 目标:
 * 在前置的nginx内做微信代理, 降低内部应用层和微信服务的耦合.
@@ -12,13 +14,13 @@
 
 ### 全局配置
 
-  [config](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/config.lua)
+  [config](lib/resty/sns/config.lua)
 
   公众号全局配置数据, 包括接口Token, 自动回复设置.
 
 ### 作为服务端由微信请求并响应
 
-  [server](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/server.lua)
+  [server](lib/resty/sns/wechat/server.lua)
 
   接收微信发出的普通消息和事件推送等请求, 并按配置做出响应, 未做对应配置则按微信要求返回success.
 
@@ -28,25 +30,25 @@
 
 ### 作为客户端代理调用微信公众号API
 
-  [proxy_access_token](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/proxy_access_token.lua)
+  [proxy_access_token](lib/resty/sns/wechat/proxy_access_token.lua)
 
   使用Redis缓存AccessToken和jsapi_ticket, 定时自动调用微信服务更新, 支持分布式更新.
 
-  [proxy](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/proxy.lua)
+  [proxy](lib/resty/sns/wechat/proxy.lua)
 
   代理调用微信公众平台API接口, 自动添加access_token参数.
 
-  [proxy_access_filter](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/proxy_access_filter.lua)
+  [proxy_access_filter](lib/resty/sns/wechat/proxy_access_filter.lua)
 
   过滤客户端IP, 限制请求来源.
 
 ### 代理网页授权获取用户基本信息
 
-  [oauth](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/oauth.lua)
+  [oauth](lib/resty/sns/wechat/oauth.lua)
 
 ### JS-SDK权限签名
 
-  [jssdk_config](https://github.com/CharLemAznable/lua-resty-wechat/blob/master/lib/resty/wechat/jssdk_config.lua)
+  [jssdk_config](lib/resty/sns/wechat/jssdk_config.lua)
 
 ## 示例
 
@@ -57,50 +59,70 @@ http {
   lua_package_path 'path to lua files';
   resolver 114.114.114.114;
 
-  lua_shared_dict wechat 1M; # 利用共享内存保持单例定时器
+  lua_shared_dict sns 1M; # 利用共享内存保持单例定时器
   init_by_lua '
-    ngx.shared.wechat:delete("updater") -- 清除定时器标识
-    require("resty.wechat.config")
+    ngx.shared.sns:delete("updater") -- 清除定时器标识
+    require("resty.sns.config")
   ';
   init_worker_by_lua '
-    local ok, err = ngx.shared.wechat:add("updater", "1") -- 单进程启动定时器
+    local ok, err = ngx.shared.sns:add("updater", "1") -- 单进程启动定时器
     if not ok or err then return end
-    require("resty.wechat.proxy_access_token")()
+    require("resty.sns.wechat.proxy_access_token")()
   ';
   server {
     location /wechat-server {
       content_by_lua '
-        require("resty.wechat.server")()
+        require("resty.sns.wechat.server")()
       ';
     }
     location /wechat-proxy/ {
       rewrite_by_lua '
-        require("resty.wechat.proxy")("wechat-proxy") -- 参数为location路径
+        require("resty.sns.wechat.proxy")("wechat-proxy") -- 参数为location路径
       ';
       access_by_lua '
-        require("resty.wechat.proxy_access_filter")()
+        require("resty.sns.wechat.proxy_access_filter")()
       ';
       proxy_pass https://api.weixin.qq.com/;
     }
     location /wechat-baseoauth { # param: goto
       rewrite_by_lua '
-        require("resty.wechat.oauth").base_oauth("path to /wechat-redirect")
+        require("resty.sns.wechat.oauth").base_oauth("path to /wechat-redirect")
       ';
     }
     location /wechat-useroauth { # param: goto
       rewrite_by_lua '
-        require("resty.wechat.oauth").userinfo_oauth("path to /wechat-redirect")
+        require("resty.sns.wechat.oauth").userinfo_oauth("path to /wechat-redirect")
       ';
     }
     location /wechat-redirect {
       rewrite_by_lua '
-        require("resty.wechat.oauth").redirect()
+        require("resty.sns.wechat.oauth").redirect()
+      ';
+    }
+    location /wechat-useroauth-code { 
+      content_by_lua '
+        if not ngx.var.arg_code then -- unauthorized
+          ngx_log(ngx.ERR, "code is empty")
+          return ngx_exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+        end
+        local code = tostring(ngx.var.arg_code)
+        local baseinfo, userinfo, err = require("resty.sns.wechat.oauth").oauth_by_code(code)
       ';
     }
     location /wechat-jssdk-config { # GET/POST, param: url, [api]
       add_header Access-Control-Allow-Origin "if need cross-domain call";
       content_by_lua '
-        require("resty.wechat.jssdk_config")()
+        require("resty.sns.wechat.jssdk_config")()
+      ';
+    }
+    location /weibo-useroauth-code { 
+      content_by_lua '
+        if not ngx.var.arg_code then -- unauthorized
+          ngx_log(ngx.ERR, "code is empty")
+          return ngx_exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+        end
+        local code = tostring(ngx.var.arg_code)
+        local baseinfo, userinfo, err = require("resty.sns.weibo.oauth").oauth_by_code(code)
       ';
     }
   }

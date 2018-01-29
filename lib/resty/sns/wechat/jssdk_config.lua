@@ -1,17 +1,18 @@
 local modname = "wechat_jssdk_config"
-local _M = { _VERSION = '0.0.1' }
+local _M = { _VERSION = '0.0.2' }
 _G[modname] = _M
 
-local random = require("resty.wechat.utils.random")
-local hex = require("resty.wechat.utils.hex")
+local random = require("resty.sns.utils.random")
+local hex = require("resty.sns.utils.hex")
 local cjson = require("cjson")
+local lua2cache = require("resty.sns.utils.lua2cache")
 
 local table_insert = table.insert
 local table_sort = table.sort
 local table_concat = table.concat
 local ngx_req = ngx.req
 
-local jsapiTicketKey = wechat_config.jsapiTicketKey or (wechat_config.appid .. "_ticket")
+local jsapiTicketKey = sns_config.wechat_jsapiTicketKey or (sns_config.wechat_appid .. "_ticket")
 
 local function string_split(str, delimiter)
   if str == nil or str == '' or delimiter == nil then
@@ -39,7 +40,9 @@ end
 local mt = {
   __call = function(_, url_param_name, api_list_param_name)
     local noncestr = random.token(16)
-    local jsapi_ticket = require("resty.wechat.utils.redis"):connect(wechat_config.redis).redis:get(jsapiTicketKey)
+
+    local jsapi_ticket = lua2cache.getTokenFromCache(jsapiTicketKey)
+
     local timestamp = os.time()
 
     local args = get_request_args()
@@ -55,7 +58,7 @@ local mt = {
     local signature = hex(ngx.sha1_bin(table_concat(tmptab, "&")))
 
     local result = {
-      appId = wechat_config.appid,
+      appId = sns_config.wechat_appid,
       timestamp = timestamp,
       nonceStr = noncestr,
       signature = signature,

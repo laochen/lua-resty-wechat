@@ -1,4 +1,4 @@
-local modname = "wechat_cookie"
+local modname = "sns_cookie"
 local _M = { _VERSION = '0.0.1' }
 _G[modname] = _M
 

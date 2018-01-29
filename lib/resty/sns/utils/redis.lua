@@ -1,4 +1,4 @@
-local modname = "wechat_redis"
+local modname = "sns_redis"
 local _M = { _VERSION = '0.0.1' }
 _G[modname] = _M
 local mt = { __index = _M }

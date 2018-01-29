@@ -1,21 +1,21 @@
 local modname = "wechat_oauth"
-local _M = { _VERSION = '0.0.1' }
+local _M = { _VERSION = '0.0.2' }
 _G[modname] = _M
 
-local urlcodec = require("resty.wechat.utils.urlcodec")
-local base62 = require("resty.wechat.utils.base62")
+local urlcodec = require("resty.sns.utils.urlcodec")
+local base62 = require("resty.sns.utils.base62")
 local cjson = require("cjson")
-local aescodec = require("resty.wechat.utils.aes").new(wechat_config.cookie_aes_key or "vFrItmxI9ct8JbAg")
-local cookie = require("resty.wechat.utils.cookie")
-local base_oauth_key = wechat_config.base_oauth_key or "__rywy_base"
-local userinfo_oauth_key = wechat_config.userinfo_oauth_key or "__rywy_userinfo"
+local aescodec = require("resty.sns.utils.aes").new(sns_config.wechat_cookie_aes_key or "vFrItmxI9ct8JbAg")
+local cookie = require("resty.sns.utils.cookie")
+local base_oauth_key = sns_config.wechat_base_oauth_key or "__rywy_base"
+local userinfo_oauth_key = sns_config.wechat_userinfo_oauth_key or "__rywy_userinfo"
 
 local ngx_log = ngx.log
 local ngx_exit = ngx.exit
 
 --------------------------------------------------private methods
 
-local authorize_addr = "https://open.weixin.qq.com/connect/oauth2/authorize?appid=" .. wechat_config.appid .. "&redirect_uri="
+local authorize_addr = "https://open.weixin.qq.com/connect/oauth2/authorize?appid=" .. sns_config.wechat_appid .. "&redirect_uri="
 local response_type_and_scope = "&response_type=code&scope="
 local state = "&state="
 local hash = "#wechat_redirect?"
@@ -31,15 +31,15 @@ local function oauth_access_token(code)
     method = "GET",
     query = {
       grant_type = "authorization_code",
-      appid = wechat_config.appid,
-      secret = wechat_config.appsecret,
+      appid = sns_config.wechat_appid,
+      secret = sns_config.wechat_appsecret,
       code = code,
     },
     ssl_verify = false,
     headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
   }
 
-  local res, err = require("resty.wechat.utils.http").new():request_uri(access_token_addr, param)
+  local res, err = require("resty.sns.utils.http").new():request_uri(access_token_addr, param)
   if not res or err or tostring(res.status) ~= "200" then
     return nil, err or tostring(res.status)
   end
@@ -65,7 +65,7 @@ local function oauth_userinfo(access_token, openid)
     headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
   }
 
-  local res, err = require("resty.wechat.utils.http").new():request_uri(userinfo_addr, param)
+  local res, err = require("resty.sns.utils.http").new():request_uri(userinfo_addr, param)
   if not res or err or tostring(res.status) ~= "200" then
     return nil, err or tostring(res.status)
   end
@@ -140,8 +140,8 @@ function _M.redirect()
     key = base_oauth_key,
     value = encrypted_baseinfo,
     expires = ngx.cookie_time(ngx.now() + 7200),
-    domain = wechat_config.cookie_domain,
-    path = wechat_config.cookie_path,
+    domain = sns_config.wechat_cookie_domain,
+    path = sns_config.wechat_cookie_path,
   })
 
   if userinfo then
@@ -150,14 +150,24 @@ function _M.redirect()
       key = userinfo_oauth_key,
       value = encrypted_userinfo,
       expires = ngx.cookie_time(ngx.now() + 7200),
-      domain = wechat_config.cookie_domain,
-      path = wechat_config.cookie_path,
+      domain = sns_config.wechat_cookie_domain,
+      path = sns_config.wechat_cookie_path,
     })
   end
 
   ngx.log(ngx.ERR, cjson.encode(ngx.header.Set_Cookie))
 
   return ngx.redirect(state, ngx.HTTP_MOVED_TEMPORARILY)
+end
+
+----------------增加code授权获取用户信息接口-----------------------
+function _M.oauth_by_code(code)
+  if not code then -- unauthorized
+    ngx_log(ngx.ERR, "code is empty")
+    return ngx_exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+  end
+
+  return request_oauth_infomation(tostring(code))
 end
 
 return _M

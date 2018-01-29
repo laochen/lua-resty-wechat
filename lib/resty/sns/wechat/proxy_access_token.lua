@@ -12,8 +12,8 @@ local updateparam = {
   method = "GET",
   query = {
     grant_type = "client_credential",
-    appid = wechat_config.appid,
-    secret = wechat_config.appsecret,
+    appid = sns_config.wechat_appid,
+    secret = sns_config.wechat_appsecret,
   },
   ssl_verify = false,
   headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
@@ -29,16 +29,16 @@ local ticketparam = {
   headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
 }
 
-local updateTime = wechat_config.accessTokenUpdateTime or 6000
-local pollingTime = wechat_config.accessTokenPollingTime or 600
-local accessTokenKey = wechat_config.accessTokenKey or wechat_config.appid
-local jsapiTicketKey = wechat_config.jsapiTicketKey or (wechat_config.appid .. "_ticket")
+local updateTime = sns_config.wechat_accessTokenUpdateTime or 6000
+local pollingTime = sns_config.wechat_accessTokenPollingTime or 600
+local accessTokenKey = sns_config.wechat_accessTokenKey or sns_config.wechat_appid
+local jsapiTicketKey = sns_config.wechat_jsapiTicketKey or (sns_config.wechat_appid .. "_ticket")
 
 local mt = {
   __call = function(_)
     local updateAccessToken
     updateAccessToken = function()
-      require("resty.wechat.utils.redis"):connect(wechat_config.redis):lockProcess(
+      require("resty.utils.redis"):connect(sns_config.redis):lockProcess(
         "accessTokenLocker",
         function(weredis)
           if 0 < tonumber(weredis.redis:ttl(accessTokenKey) or 0) then
@@ -46,7 +46,7 @@ local mt = {
           end
 
           -- access_token time out, refresh
-          local res, err = require("resty.wechat.utils.http").new():request_uri(updateurl, updateparam)
+          local res, err = require("resty.sns.utils.http").new():request_uri(updateurl, updateparam)
           if not res or err or tostring(res.status) ~= "200" then
             ngx_log(ngx.ERR, "failed to update access token: ", err or tostring(res.status))
             return
@@ -67,7 +67,7 @@ local mt = {
 
           -- refresh jsapi_ticket after refresh access_token
           ticketparam.query.access_token = resbody.access_token
-          local res, err = require("resty.wechat.utils.http").new():request_uri(ticketurl, ticketparam)
+          local res, err = require("resty.sns.utils.http").new():request_uri(ticketurl, ticketparam)
           ticketparam.query.access_token = nil
           if not res or err or tostring(res.status) ~= "200" then
             ngx_log(ngx.ERR, "failed to update jsapi ticket: ", err or tostring(res.status))

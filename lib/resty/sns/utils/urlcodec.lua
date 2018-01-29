@@ -1,4 +1,4 @@
-local modname = "wechat_urlcodec"
+local modname = "sns_urlcodec"
 local _M = { _VERSION = '0.0.1' }
 _G[modname] = _M
 

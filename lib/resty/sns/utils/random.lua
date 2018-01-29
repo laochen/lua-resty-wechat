@@ -1,4 +1,4 @@
-local modname = "wechat_random2"
+local modname = "sns_random2"
 local _M = { _VERSION = '0.0.1' }
 _G[modname] = _M
 
